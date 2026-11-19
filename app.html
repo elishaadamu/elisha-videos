@@ -151,8 +151,9 @@ function thumbBox(p){
       <div class="doc" style="white-space:pre-wrap;max-height:none">${esc(prompt.replace(/\n(?!\n)/g, " "))}</div>
       <div style="margin-top:8px;display:flex;gap:8px">${copyBtn(prompt.replace(/\n(?!\n)/g, " "), "📋 Copy prompt")}</div>` : ""}
     ${overlay ? `<label>Text to put on the thumbnail</label><div class="doc">${md(overlay)}</div>` : ""}
-    ${p.thumbnail ? `<label>Ready-made thumbnail (used when publishing to YouTube)</label>
-      <a href="${BASE}${p.thumbnail}" target="_blank" download><img src="${BASE}${p.thumbnail}?v=${Date.now() >> 16}" style="max-width:min(100%,480px);border-radius:8px;margin-top:6px"></a>` : ""}
+    <label>${p.thumbnail ? "Current thumbnail (used when publishing to YouTube)" : "Thumbnail (used when publishing to YouTube)"}</label>
+    ${p.thumbnail ? `<a href="${BASE}${p.thumbnail}" target="_blank" download><img src="${BASE}${p.thumbnail}?v=${p.thumbnail_v}" style="max-width:min(100%,480px);border-radius:8px;margin-top:6px;display:block"></a>` : ""}
+    <div style="margin-top:8px;max-width:480px">${dropZone("thumbnail", "image/png,image/jpeg", p.thumbnail ? "🔄 Change thumbnail: drop your new image here or click (JPG/PNG, 1280×720, under 2 MB)" : "Drop a thumbnail image here or click (JPG/PNG, 1280×720, under 2 MB)")}</div>
   </div>`;
 }
 
@@ -167,6 +168,8 @@ async function removeMedia(kind, file){
   await api("/api/media/delete", {method: "POST", body: JSON.stringify({name: cur, kind, file})}); lastSig = ""; load();
 }
 function upload(kind, file){
+  if (!file) return;
+  if (kind === "thumbnail" && file.size > 2 * 1024 * 1024) return alert("YouTube thumbnails must be under 2 MB. This one is " + (file.size / 1048576).toFixed(1) + " MB. Save it as JPG to make it smaller.");
   const bar = $(`#bar-${kind}`), fill = bar.querySelector("i");
   bar.style.display="block";
   const x = new XMLHttpRequest();
@@ -448,8 +451,8 @@ function ytPanel(p){
           <option value="1">Film & Animation</option><option value="22">People & Blogs</option></select></div>
     </div>
     <label>Custom thumbnail (optional, jpg/png ≤ 2 MB, needs a verified channel. Shorts usually pick their cover in the app)</label>
-    ${p.thumbnail ? `<p><img src="${BASE}${p.thumbnail}" style="height:90px;border-radius:6px;vertical-align:middle"> <label style="display:inline"><input type="checkbox" id="yt-thumb" style="width:auto" checked> use it</label></p>` : ""}
-    <div ${p.thumbnail ? 'style="display:none"' : ""}>${dropZone("thumbnail", "image/png,image/jpeg", "Drop thumbnail image here or click")}</div>
+    ${p.thumbnail ? `<p><img src="${BASE}${p.thumbnail}?v=${p.thumbnail_v}" style="height:90px;border-radius:6px;vertical-align:middle"> <label style="display:inline"><input type="checkbox" id="yt-thumb" style="width:auto" checked> use it</label>
+      · <a href="#" onclick="document.querySelector('#drop-thumbnail').click();return false">change thumbnail</a></p>` : `<p class="muted">No thumbnail yet: add one in step 6.</p>`}
     <div style="margin-top:14px;display:flex;gap:10px;align-items:center">
       <button onclick="ytUpload()" ${busy ? "disabled" : ""}>${busy ? "Uploading…" : "⬆ Upload to YouTube"}</button>
       <button class="ghost" onclick="ytReset()">Reset from metadata</button>
