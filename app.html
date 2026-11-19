@@ -208,8 +208,171 @@ function render(){
      `${promptBox(`Give me the title, description, hashtags, tags and thumbnail image prompt for project "${N}" (YouTube + Facebook)`)}
       ${has.meta?`<div style="margin-top:8px">${copyBtn(d["metadata.md"],"Copy all")}</div><div class="doc">${md(d["metadata.md"])}</div>`:""}`)}
   ${step(7, "Publish to YouTube", p.youtube.length ? "done" : (has.out && has.meta ? "next" : ""), ytPanel(p))}
+  ${step(8, "Publish to TikTok", p.tiktok.some(e => ["PUBLISH_COMPLETE","SEND_TO_USER_INBOX"].includes(e.status)) ? "done" : "", ttPanel(p))}
   </div>`;
-  ytFill(p);
+  ytFill(p); ttFill(p);
+}
+
+// ---------- TikTok publishing (follows TikTok Content Sharing Guidelines) ----------
+let tt = null;               // {configured, connected, user, error}
+const ttForms = {};          // per project form state
+const ttCreator = {};        // per project creator_info (fetched when the post form opens)
+const PRIV_LABEL = {PUBLIC_TO_EVERYONE: "Everyone", MUTUAL_FOLLOW_FRIENDS: "Friends", FOLLOWER_OF_CREATOR: "Followers", SELF_ONLY: "Only me"};
+const TT_STATUS = {QUEUED: "Queued", UPLOADING: "Uploading…", PROCESSING: "Processing on TikTok…", SCHEDULED: "Scheduled",
+  PUBLISH_COMPLETE: "Posted ✅", SEND_TO_USER_INBOX: "Sent to TikTok inbox/drafts ✅", FAILED: "Failed ❌", CANCELLED: "Cancelled",
+  PROCESSING_UPLOAD: "Processing…", PROCESSING_DOWNLOAD: "Processing…"};
+async function ttStatus(){ try { tt = await (await fetch(BASE + "/api/tt/status")).json(); } catch(e) { tt = null; } lastSig = ""; load(); }
+
+function ttHistory(p){
+  return p.tiktok.slice().reverse().map(e => `<p>${e.mode === "draft" ? "📥" : "🎵"} <b>${esc((e.title || "(draft)").split("\n")[0].slice(0, 60))}</b>
+    <span class="tag">${TT_STATUS[e.status] || e.status}</span>
+    ${e.privacy ? `<span class="tag">${PRIV_LABEL[e.privacy] || e.privacy}</span>` : ""}
+    ${e.scheduled_for ? `<span class="muted">for ${e.scheduled_for}</span>` : `<span class="muted">${e.created}</span>`}
+    ${e.status === "SCHEDULED" ? `<a href="#" onclick="ttCancel('${e.entry}');return false">cancel</a>` : ""}
+    ${e.fail_reason ? `<br><span style="color:#e5484d">${esc(e.fail_reason)}</span>` : ""}</p>`).join("");
+}
+
+function ttPanel(p){
+  if (!tt) return `<p class="muted">Checking TikTok connection…</p>`;
+  if (!tt.configured) return `<p class="muted">Missing <code>config/tiktok_client.json</code>.</p>`;
+  if (!tt.connected) return `${ttHistory(p)}
+    ${tt.error ? `<p style="color:#e5484d">${esc(tt.error)}</p>` : ""}
+    <p class="muted">Connect your TikTok account once. TikTok will ask you to log in and allow posting.</p>
+    <a href="${BASE}/tiktok/start"><button>🎵 Connect TikTok</button></a>`;
+  const job = p.tt_job, busy = job && ["uploading", "processing"].includes(job.state);
+  const ci = ttCreator[p.name];
+  const user = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      ${(ci?.creator_avatar_url || tt.user?.avatar) ? `<img src="${ci?.creator_avatar_url || tt.user.avatar}" style="width:36px;height:36px;border-radius:50%">` : ""}
+      <div>Posting to <b>${esc(ci?.creator_nickname || tt.user?.name || "")}</b>${ci?.creator_username ? ` <span class="muted">@${esc(ci.creator_username)}</span>` : ""}</div>
+      <a href="#" class="muted" style="margin-left:auto" onclick="ttDisconnect();return false">disconnect</a></div>`;
+  if (!p.outputs.length) return ttHistory(p) + user + `<p class="muted">Render the video first (step 5).</p>`;
+  if (!ci) return ttHistory(p) + user + `<p class="muted">Loading your TikTok creator settings…</p>`;
+  if (ci.error) return ttHistory(p) + user + `<p style="color:#e5484d">${esc(ci.error)}</p><button class="ghost" onclick="ttLoadCreator('${p.name}',true)">Retry</button>`;
+  const tooLong = ci.max_video_post_duration_sec && p.duration && Math.ceil(p.duration) > ci.max_video_post_duration_sec;
+  const out = p.outputs[p.outputs.length - 1];
+  return `${ttHistory(p)}${user}
+  <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+    <video controls preload="metadata" src="${BASE}${out.url}?t=${out.time}#t=0.5" style="height:340px;margin:0;border-radius:10px"></video>
+    <div style="flex:1;min-width:300px">
+      <div class="seg" style="margin-bottom:6px">
+        <button id="tt-m-direct" onclick="ttMode('direct')">Post to TikTok</button>
+        <button id="tt-m-draft" onclick="ttMode('draft')">Send to drafts</button>
+      </div>
+      <div id="tt-direct">
+        <label>Caption (title)</label>
+        <textarea id="tt-title" maxlength="2200" style="min-height:110px"></textarea>
+        <label>Who can view this video *</label>
+        <select id="tt-privacy"><option value="" disabled>Select…</option>
+          ${(ci.privacy_level_options || []).map(o => `<option value="${o}" id="tt-p-${o}">${PRIV_LABEL[o] || o}</option>`).join("")}</select>
+        <label>Allow users to</label>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          ${[["comment","Comment",ci.comment_disabled],["duet","Duet",ci.duet_disabled],["stitch","Stitch",ci.stitch_disabled]].map(([k,l,dis]) =>
+            `<label style="display:inline-flex;gap:6px;align-items:center;margin:0;color:${dis ? "var(--muted)" : "var(--text)"}">
+              <input type="checkbox" id="tt-allow-${k}" style="width:auto" ${dis ? "disabled" : ""}> ${l}${dis ? " (off in your TikTok settings)" : ""}</label>`).join("")}
+        </div>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:14px;color:var(--text)"><input type="checkbox" id="tt-disclose" style="width:auto"> <b>Disclose video content</b></label>
+        <div id="tt-disclose-box" style="display:none;border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:6px">
+          <p class="muted" style="margin:0 0 6px">Turn on to disclose that this video promotes goods or services in exchange for something of value.</p>
+          <label style="display:flex;gap:8px;align-items:center;color:var(--text);margin:4px 0"><input type="checkbox" id="tt-brand-own" style="width:auto"> Your brand: you are promoting yourself or your own business</label>
+          <label style="display:flex;gap:8px;align-items:center;color:var(--text);margin:4px 0"><input type="checkbox" id="tt-brand-paid" style="width:auto"> Branded content: you are promoting another brand or a third party</label>
+          <p id="tt-brand-label" class="muted" style="margin:6px 0 0"></p>
+        </div>
+      </div>
+      <div id="tt-draft" style="display:none"><p class="muted">The video is sent to your TikTok inbox. Open TikTok to add sounds or effects and post it from there.</p></div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:14px;color:var(--text)"><input type="checkbox" id="tt-sched" style="width:auto"> Schedule for later</label>
+      <div id="tt-sched-box" style="display:none"><input id="tt-when" type="datetime-local">
+        <p class="muted" style="margin:4px 0 0">Clip Studio posts it at that time, so keep this computer on and <code>python3 server.py</code> running.</p></div>
+      ${tooLong ? `<p style="color:#e5484d">This video is ${Math.ceil(p.duration)}s, but your account can post up to ${ci.max_video_post_duration_sec}s.</p>` : ""}
+      <p id="tt-consent" class="muted" style="margin-top:14px"></p>
+      <div style="display:flex;gap:10px;align-items:center">
+        <button id="tt-go" onclick="ttPost()" ${busy || tooLong ? "disabled" : ""}>${busy ? (job.state === "processing" ? "Processing…" : "Uploading…") : "Post"}</button>
+        <button class="ghost" onclick="ttReset()">Reset caption</button>
+        ${job && job.state === "error" ? `<span style="color:#e5484d">${esc(job.error)}</span>` : ""}
+      </div>
+      ${busy ? `<div class="bar" style="display:block"><i style="width:${Math.round(job.progress * 100)}%"></i></div>` : ""}
+      ${job && job.state === "done" && !job.error ? `<p class="muted">Done. It can take a few minutes for the video to appear on your TikTok profile.</p>` : ""}
+    </div>
+  </div>`;
+}
+
+async function ttLoadCreator(name, force){
+  if (ttCreator[name] && !force) return;
+  ttCreator[name] = null;
+  try { const r = await (await fetch(BASE + "/api/tt/creator")).json(); ttCreator[name] = r.error ? {error: r.error} : r; }
+  catch(e) { ttCreator[name] = {error: String(e)}; }
+  lastSig = ""; load();
+}
+
+async function ttFill(p){
+  if (!tt || !tt.connected || !p.outputs.length) return;
+  if (ttCreator[p.name] === undefined) return ttLoadCreator(p.name);
+  if (!document.getElementById("tt-title")) return;
+  let f = ttForms[p.name];
+  if (!f) {
+    const d = await (await fetch(BASE + "/api/tt/defaults?name=" + encodeURIComponent(p.name))).json();
+    const t = new Date(Date.now() + 24 * 3600e3); t.setMinutes(0, 0, 0);
+    f = ttForms[p.name] = {mode: "direct", title: d.title || p.title, privacy: "", comment: false, duet: false, stitch: false,
+      disclose: false, own: false, paid: false, sched: false, when: new Date(t - t.getTimezoneOffset() * 60e3).toISOString().slice(0, 16)};
+  }
+  $("#tt-title").value = f.title; $("#tt-privacy").value = f.privacy;
+  ["comment","duet","stitch"].forEach(k => { const el = $("#tt-allow-" + k); el.checked = f[k] && !el.disabled; });
+  $("#tt-disclose").checked = f.disclose; $("#tt-brand-own").checked = f.own; $("#tt-brand-paid").checked = f.paid;
+  $("#tt-sched").checked = f.sched; $("#tt-when").value = f.when;
+  document.querySelectorAll("#tt-direct input, #tt-direct select, #tt-direct textarea, #tt-sched, #tt-when")
+    .forEach(el => el.oninput = el.onchange = () => { ttSave(); ttUi(); });
+  ttUi();
+}
+function ttSave(){
+  if (!cur || !$("#tt-title")) return;
+  const f = ttForms[cur];
+  Object.assign(f, {title: $("#tt-title").value, privacy: $("#tt-privacy").value,
+    comment: $("#tt-allow-comment").checked, duet: $("#tt-allow-duet").checked, stitch: $("#tt-allow-stitch").checked,
+    disclose: $("#tt-disclose").checked, own: $("#tt-brand-own").checked, paid: $("#tt-brand-paid").checked,
+    sched: $("#tt-sched").checked, when: $("#tt-when").value});
+  if (!f.disclose) { f.own = false; f.paid = false; }
+}
+function ttMode(m){ ttForms[cur].mode = m; ttUi(); }
+function ttUi(){
+  const f = ttForms[cur]; if (!f || !$("#tt-title")) return;
+  $("#tt-m-direct").classList.toggle("on", f.mode === "direct"); $("#tt-m-draft").classList.toggle("on", f.mode === "draft");
+  $("#tt-direct").style.display = f.mode === "direct" ? "" : "none"; $("#tt-draft").style.display = f.mode === "draft" ? "" : "none";
+  $("#tt-disclose-box").style.display = f.disclose ? "" : "none";
+  $("#tt-sched-box").style.display = f.sched ? "" : "none";
+  // Branded content can't be private
+  const selfOpt = document.getElementById("tt-p-SELF_ONLY");
+  if (selfOpt) { selfOpt.disabled = f.paid; selfOpt.textContent = f.paid ? "Only me (not available for branded content)" : "Only me"; }
+  if (f.paid && f.privacy === "SELF_ONLY") { f.privacy = ""; $("#tt-privacy").value = ""; }
+  $("#tt-brand-label").textContent = f.paid ? 'Your video will be labeled "Paid partnership".' : f.own ? 'Your video will be labeled "Promotional content".' : "";
+  const music = `<a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank">Music Usage Confirmation</a>`;
+  const bc = `<a href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank">Branded Content Policy</a>`;
+  $("#tt-consent").innerHTML = f.mode === "draft" ? "" : `By posting, you agree to TikTok's ${f.paid ? bc + " and " : ""}${music}.`;
+  const disclosedButEmpty = f.mode === "direct" && f.disclose && !f.own && !f.paid;
+  const go = $("#tt-go");
+  if (!go.textContent.includes("…")) {
+    go.disabled = (f.mode === "direct" && !f.privacy) || disclosedButEmpty;
+    go.title = disclosedButEmpty ? "You need to indicate if your content promotes yourself, a third party, or both." : (!f.privacy && f.mode === "direct" ? "Choose who can view this video" : "");
+    go.textContent = f.sched ? "Schedule" : (f.mode === "draft" ? "Send to TikTok" : "Post");
+  }
+}
+function ttReset(){ delete ttForms[cur]; lastSig = ""; load(); }
+async function ttCancel(entry){ await api("/api/tt/cancel", {method: "POST", body: JSON.stringify({name: cur, entry})}); lastSig = ""; load(); }
+async function ttDisconnect(){ await api("/api/tt/disconnect", {method: "POST", body: "{}"}); Object.keys(ttCreator).forEach(k => delete ttCreator[k]); ttStatus(); }
+async function ttPost(){
+  ttSave(); const f = ttForms[cur];
+  const body = {name: cur, mode: f.mode};
+  if (f.mode === "direct") {
+    if (!f.privacy) return alert("Choose who can view this video");
+    Object.assign(body, {title: f.title, privacy_level: f.privacy,
+      disable_comment: !f.comment, disable_duet: !f.duet, disable_stitch: !f.stitch,
+      brand_organic_toggle: f.disclose && f.own, brand_content_toggle: f.disclose && f.paid});
+  }
+  if (f.sched) {
+    const t = new Date(f.when);
+    if (!(t > new Date(Date.now() + 2 * 60e3))) return alert("Pick a time at least 2 minutes from now");
+    body.at_ts = t.getTime() / 1000;
+  }
+  await api("/api/tt/post", {method: "POST", body: JSON.stringify(body)});
+  toast(f.sched ? "Scheduled" : "Posting to TikTok…"); lastSig = ""; load();
 }
 
 // ---------- YouTube publishing ----------
@@ -298,7 +461,8 @@ async function ytUpload(){
 
 // re-renders only when something on disk changed (Claude wrote a file / render finished)
 if (location.search.includes("yt=connected")) { history.replaceState(null, "", location.pathname); setTimeout(() => toast("YouTube connected"), 300); }
-load(); ytStatus(); setInterval(load, 4000);
+if (location.search.includes("tt=connected")) { history.replaceState(null, "", location.pathname); setTimeout(() => toast("TikTok connected"), 300); }
+load(); ytStatus(); ttStatus(); setInterval(load, 4000);
 </script>
 </body>
 </html>
