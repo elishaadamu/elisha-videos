@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clip Studio</title>
+<style>
+  :root{--bg:#0f1115;--panel:#171a21;--line:#262a33;--text:#e7e9ee;--muted:#8b93a3;--acc:#ffcc00;--ok:#3ecf8e;--warn:#f5a524}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);display:grid;grid-template-columns:290px 1fr;height:100vh}
+  aside{border-right:1px solid var(--line);padding:18px;overflow:auto;background:var(--panel)}
+  main{overflow:auto;padding:24px 32px 80px}
+  h1{font-size:18px;margin:0 0 16px}h1 span{color:var(--acc)}
+  h2{font-size:20px;margin:0}
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+  input,select,textarea{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px 10px;font:inherit}
+  textarea{min-height:60px;resize:vertical}
+  button{background:var(--acc);color:#111;border:0;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;font:inherit;font-weight:600}
+  button.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+  button:disabled{opacity:.5;cursor:default}
+  .seg{display:flex;gap:6px}.seg button{flex:1}
+  .seg button:not(.on){background:transparent;color:var(--muted);border:1px solid var(--line)}
+  .plist{margin-top:22px;display:flex;flex-direction:column;gap:6px}
+  .pitem{padding:10px;border:1px solid var(--line);border-radius:8px;cursor:pointer}
+  .pitem.on{border-color:var(--acc)}
+  .pitem small{color:var(--muted);display:block}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--muted);margin-right:4px}
+  .head{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+  .steps{display:flex;flex-direction:column;gap:14px}
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .step header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .num{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--line);font-weight:700;font-size:13px}
+  .step.done .num{background:var(--ok);color:#111}
+  .step.next .num{background:var(--acc);color:#111}
+  .step h3{margin:0;font-size:15px;flex:1}
+  .muted{color:var(--muted)}
+  .prompt{display:flex;gap:8px;align-items:stretch;margin-top:8px}
+  .prompt code{flex:1;background:var(--bg);border:1px dashed var(--line);border-radius:8px;padding:8px 10px;font:12.5px ui-monospace,Menlo,monospace;color:var(--acc)}
+  .drop{border:2px dashed var(--line);border-radius:10px;padding:18px;text-align:center;color:var(--muted);cursor:pointer}
+  .drop.over{border-color:var(--acc);color:var(--text)}
+  .bar{height:6px;background:var(--line);border-radius:6px;overflow:hidden;margin-top:8px;display:none}
+  .bar i{display:block;height:100%;background:var(--acc);width:0}
+  .doc{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 16px;max-height:460px;overflow:auto;margin-top:8px}
+  .doc h1,.doc h2,.doc h3{font-size:15px;margin:14px 0 6px;color:var(--acc)}
+  .doc p{margin:6px 0}.doc ul{margin:4px 0;padding-left:20px}
+  .doc pre{white-space:pre-wrap;background:#0003;padding:8px;border-radius:6px}
+  .sheets{display:flex;gap:8px;overflow-x:auto;margin-top:8px}.sheets img{height:150px;border-radius:6px;border:1px solid var(--line)}
+  video{max-width:100%;max-height:70vh;border-radius:10px;background:#000;display:block;margin-top:8px}
+  audio{width:100%;margin-top:8px}
+  .outs{display:flex;gap:16px;flex-wrap:wrap}.outs > div{flex:0 1 auto}
+  .empty{display:grid;place-items:center;height:70vh;color:var(--muted);text-align:center}
+  a{color:var(--acc)}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--ok);color:#111;padding:8px 14px;border-radius:8px;font-weight:600;display:none}
+</style>
+</head>
+<body>
+<aside>
+  <h1>🎬 Clip <span>Studio</span></h1>
+  <label>Project title</label>
+  <input id="nTitle" placeholder="e.g. Morning routine short">
+  <label>Project type</label>
+  <div class="seg" id="nType">
+    <button class="on" data-v="clip">Clip / Short</button>
+    <button data-v="movie">Movie recap</button>
+  </div>
+  <label>Format</label>
+  <div class="seg" id="nFormat">
+    <button class="on" data-v="9:16">9:16 · ≤60s</button>
+    <button data-v="16:9">16:9 · long</button>
+  </div>
+  <label>Notes for Claude (optional)</label>
+  <textarea id="nNotes" placeholder="Niche, tone, target audience, language…"></textarea>
+  <button style="width:100%;margin-top:12px" onclick="createProject()">+ New project</button>
+  <div class="plist" id="plist"></div>
+</aside>
+<main id="main"><div class="empty">Create or pick a project on the left.<br>Then follow the steps — each step tells you what to ask Claude in the IDE.</div></main>
+<div class="toast" id="toast"></div>
+<div id="offline" style="display:none;position:fixed;top:0;left:0;right:0;background:#e5484d;color:#fff;padding:10px 16px;font-weight:600;z-index:9">
+  Can't reach Clip Studio server. In the terminal run <code>python3 server.py</code>, then open <a style="color:#fff" href="http://localhost:8000">http://localhost:8000</a></div>
+
+<script>
+// works even if this file is opened directly / via Live Server: always talk to the Python server
+const BASE = (location.protocol === "file:" || location.pathname.endsWith("/web/index.html")) ? "http://localhost:8000" : "";
+let projects = [], cur = null, lastSig = "";
+const $ = s => document.querySelector(s);
+const esc = s => (s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function toast(t){const e=$("#toast");e.textContent=t;e.style.display="block";setTimeout(()=>e.style.display="none",1600)}
+function copy(t){navigator.clipboard.writeText(t);toast("Copied — paste it to Claude")}
+
+document.querySelectorAll(".seg").forEach(g => g.onclick = e => {
+  if (e.target.tagName !== "BUTTON") return;
+  g.querySelectorAll("button").forEach(b => b.classList.toggle("on", b === e.target));
+});
+const segVal = id => $(`#${id} .on`).dataset.v;
+
+function md(src){
+  if(!src) return "";
+  let h = esc(src)
+    .replace(/```([\s\S]*?)```/g,(_,c)=>`<pre>${c}</pre>`)
+    .replace(/^### (.*)$/gm,"<h3>$1</h3>").replace(/^## (.*)$/gm,"<h2>$1</h2>").replace(/^# (.*)$/gm,"<h1>$1</h1>")
+    .replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").replace(/`([^`]+)`/g,"<code>$1</code>")
+    .replace(/^\s*[-*] (.*)$/gm,"<li>$1</li>").replace(/(<li>.*<\/li>\n?)+/g,m=>`<ul>${m}</ul>`);
+  return h.split(/\n{2,}/).map(p=>/^<(h\d|ul|pre)/.test(p)?p:`<p>${p.replace(/\n/g,"<br>")}</p>`).join("");
+}
+
+async function api(path, opts){let r;
+  try { r = await fetch(BASE + path, opts); }
+  catch(e){ $("#offline").style.display="block"; throw e; }
+  $("#offline").style.display="none"; const j = await r.json(); if(j.error) {alert(j.error); throw j.error} return j}
+
+async function load(){
+  projects = await api("/api/projects");
+  if (cur && !projects.find(p=>p.name===cur)) cur = null;
+  const sig = JSON.stringify(projects);
+  if (sig === lastSig) return; lastSig = sig;
+  $("#plist").innerHTML = projects.map(p=>`
+    <div class="pitem ${p.name===cur?"on":""}" onclick="pick('${p.name}')">
+      <b>${esc(p.title)}</b>
+      <small><span class="tag">${p.type==="movie"?"Movie recap":"Clip"}</span><span class="tag">${p.format}</span>${p.created||""}</small>
+    </div>`).join("");
+  render();
+}
+function pick(n){cur=n;lastSig="";load()}
+
+async function createProject(){
+  const title = $("#nTitle").value.trim(); if(!title) return alert("Give it a title");
+  const p = await api("/api/projects",{method:"POST",body:JSON.stringify({title,type:segVal("nType"),format:segVal("nFormat"),notes:$("#nNotes").value})});
+  $("#nTitle").value=""; $("#nNotes").value=""; cur=p.name; lastSig=""; load();
+}
+async function saveFocus(){await api("/api/meta",{method:"POST",body:JSON.stringify({name:cur,focus:$("#focus").value.trim()})});toast("Saved");lastSig="";load()}
+async function setFormat(f){await api("/api/meta",{method:"POST",body:JSON.stringify({name:cur,format:f})});lastSig="";load()}
+
+function upload(kind, file){
+  const bar = $(`#bar-${kind}`), fill = bar.querySelector("i");
+  bar.style.display="block";
+  const x = new XMLHttpRequest();
+  x.open("POST", BASE + `/api/upload?project=${encodeURIComponent(cur)}&kind=${kind}`);
+  x.setRequestHeader("X-Filename", encodeURIComponent(file.name));
+  x.upload.onprogress = e => fill.style.width = (e.loaded/e.total*100)+"%";
+  x.onload = () => {bar.style.display="none"; toast("Uploaded "+file.name); lastSig=""; load()};
+  x.onerror = () => alert("Upload failed");
+  x.send(file);
+}
+function dropZone(kind, accept, label){
+  return `<div class="drop" id="drop-${kind}" onclick="this.nextElementSibling.click()"
+     ondragover="event.preventDefault();this.classList.add('over')" ondragleave="this.classList.remove('over')"
+     ondrop="event.preventDefault();this.classList.remove('over');upload('${kind}',event.dataTransfer.files[0])">${label}</div>
+     <input type="file" accept="${accept}" hidden onchange="upload('${kind}',this.files[0])">
+     <div class="bar" id="bar-${kind}"><i></i></div>`;
+}
+let clips = [];
+const copyBtn = (t, label="Copy") => `<button class="ghost" onclick="copy(clips[${clips.push(t)-1}])">${label}</button>`;
+const promptBox = t => `<div class="prompt"><code>${esc(t)}</code>${copyBtn(t)}</div>`;
+
+function step(n, title, state, body){
+  return `<div class="step ${state}"><header><div class="num">${state==="done"?"✓":n}</div><h3>${title}</h3></header>${body}</div>`;
+}
+
+function render(){
+  const p = projects.find(x=>x.name===cur);
+  if(!p){ $("#main").innerHTML = `<div class="empty">Create or pick a project on the left.<br>Then follow the steps — each step tells you what to ask Claude in the IDE.</div>`; return; }
+  // keep media players alive if nothing about them changed
+  const movie = p.type==="movie", d = p.docs;
+  const has = {video:!!p.video, analysis:!!d["analysis.md"], script:!!d["script.md"], vo:!!p.voiceover, out:p.outputs.length>0, meta:!!d["metadata.md"]};
+  const order = ["video","analysis","script","vo","out","meta"]; const nextKey = order.find(k=>!has[k]);
+  const st = k => has[k] ? "done" : (k===nextKey ? "next" : "");
+  const N = p.name, F = p.format; clips = [];
+  const len = F==="9:16" ? "a 9:16 short of the best moment only (≤60s)" : (movie ? "a long 16:9 movie recap/explanation" : "a 16:9 long video");
+
+  $("#main").innerHTML = `
+  <div class="head">
+    <h2>${esc(p.title)}</h2>
+    <span class="tag">${movie?"Movie recap":"Clip / Short"}</span>
+    <div class="seg" style="width:240px">
+      <button class="${F==="9:16"?"on":""}" onclick="setFormat('9:16')">9:16</button>
+      <button class="${F==="16:9"?"on":""}" onclick="setFormat('16:9')">16:9</button>
+    </div>
+    <span class="muted">folder: projects/${N}/</span>
+  </div>
+  ${p.notes?`<p class="muted">Notes: ${esc(p.notes)}</p>`:""}
+  <div class="steps">
+  ${step(1, movie?"Upload the movie":"Upload your video", st("video"),
+     (p.video?`<p>✅ <b>${esc(p.video)}</b> — <a href="#" onclick="document.querySelector('#drop-video').click();return false">replace</a></p>`:"") +
+     `<div ${p.video?'style="display:none"':""}>${dropZone("video","video/*","Drop video here or click to choose")}</div>`)}
+  ${step(2, "Claude analyses the video", st("analysis"),
+     `<label>Scene you want (optional) — type it and Claude goes straight to it, e.g. "the car crash", "the moment he finds the money"</label>
+      <div class="prompt"><input id="focus" value="${esc(p.focus||"")}" placeholder="Leave empty = Claude picks the most attention-grabbing scene">
+      <button class="ghost" onclick="saveFocus()">Save</button></div>
+      <p class="muted">The scene finder ranks the best moments locally (motion, cuts, brightness), so Claude only reviews the top picks.</p>
+      ${promptBox(`Analyse the video in project "${N}"${p.focus?` and use the scene: ${p.focus}`:""}${movie?" — it's a movie, I want to explain/recap it for YouTube":""}`)}
+      ${p.top_scenes?`<p class="muted" style="margin-bottom:0">Top-ranked scenes:</p><a href="${BASE}${p.top_scenes}" target="_blank"><img src="${BASE}${p.top_scenes}?v=${p.created}" style="max-width:min(100%,720px);border-radius:8px;margin-top:6px"></a>`:""}
+      ${p.sheets.length?`<details><summary class="muted">Overview sheets</summary><div class="sheets">${p.sheets.map(s=>`<a href="${BASE}${s}" target="_blank"><img src="${BASE}${s}"></a>`).join("")}</div></details>`:""}
+      ${has.analysis?`<div class="doc">${md(d["analysis.md"])}</div>`:""}`)}
+  ${step(3, "Get the voiceover script", st("script"),
+     `${promptBox(`Write the voiceover script for project "${N}" — ${len}`)}
+      ${has.script?`<div style="margin-top:8px">${copyBtn(d["script.md"],"Copy whole script")}</div><div class="doc">${md(d["script.md"])}</div>`:""}`)}
+  ${step(4, "Upload the voiceover you generated", st("vo"),
+     (p.voiceover?`<p>✅ <b>${esc(p.voiceover)}</b></p><audio controls src="${BASE}/files/${N}/uploads/voiceover/${encodeURIComponent(p.voiceover)}"></audio><p><a href="#" onclick="document.querySelector('#drop-voiceover').click();return false">replace</a></p>`:"") +
+     `<div ${p.voiceover?'style="display:none"':""}>${dropZone("voiceover","audio/*,video/*","Drop voiceover (mp3 / wav / m4a) here or click")}</div>
+      <label style="margin-top:16px">Background music (optional) — Claude adds it under your voice + sound effects. No upload = uses assets/music/ or none.</label>
+      ${p.music?`<p>🎵 <b>${esc(p.music)}</b> — <a href="#" onclick="document.querySelector('#drop-music').click();return false">replace</a></p>`:""}
+      <div ${p.music?'style="display:none"':""}>${dropZone("music","audio/*","Drop music track here or click")}</div>`)}
+  ${step(5, "Claude clips video + voiceover, adds captions, music & SFX", st("out"),
+     `${promptBox(`Clip the video and voiceover together for project "${N}" with captions, music and sound effects (${F})`)}
+      <div class="outs">${p.outputs.slice().reverse().map(o=>`<div><video controls preload="metadata" src="${BASE}${o.url}?t=${o.time}" style="${F==="9:16"?"height:60vh":"width:min(100%,800px)"}"></video>
+      <p><a href="${BASE}${o.url}" download>⬇ Download ${esc(o.name)}</a> <span class="muted">${o.mb} MB</span></p></div>`).join("")}</div>`)}
+  ${step(6, "Title, description, tags & thumbnail/image prompt", st("meta"),
+     `${promptBox(`Give me the title, description, hashtags, tags and thumbnail image prompt for project "${N}" (YouTube + Facebook)`)}
+      ${has.meta?`<div style="margin-top:8px">${copyBtn(d["metadata.md"],"Copy all")}</div><div class="doc">${md(d["metadata.md"])}</div>`:""}`)}
+  ${step(7, "Publish to YouTube", p.youtube.length ? "done" : (has.out && has.meta ? "next" : ""), ytPanel(p))}
+  </div>`;
+  ytFill(p);
+}
+
+// ---------- YouTube publishing ----------
+let yt = null;            // {configured, connected, channel, error}
+const ytForms = {};        // per-project form state, survives re-renders
+async function ytStatus(){ try { yt = await (await fetch(BASE + "/api/yt/status")).json(); } catch(e) { yt = null; } lastSig=""; load(); }
+
+function ytPanel(p){
+  if (!yt) return `<p class="muted">Checking YouTube connection…</p>`;
+  if (!yt.configured) return `<p class="muted">Missing <code>config/youtube_client.json</code>.</p>`;
+  const hist = p.youtube.slice().reverse().map(h => `<p>✅ <a href="${h.url}" target="_blank">${esc(h.title)}</a>
+      <span class="tag">${h.publishAt ? "scheduled " + new Date(h.publishAt).toLocaleString() : h.privacy}</span>
+      <a class="muted" href="${h.studio}" target="_blank">open in Studio</a> <span class="muted">${h.uploaded}${h.thumbnail ? " · thumbnail " + esc(h.thumbnail) : ""}</span></p>`).join("");
+  if (!yt.connected) return `${hist}
+      ${yt.error ? `<p style="color:#e5484d">${esc(yt.error)}</p>` : ""}
+      <p class="muted">Connect your channel once. Google will ask you to sign in and allow uploads.</p>
+      <a href="${BASE}/oauth/start"><button>▶ Connect YouTube</button></a>`;
+  const up = p.yt_upload;
+  const busy = up && up.state === "uploading";
+  return `${hist}
+    <p class="muted">Channel: <b>${esc(yt.channel?.title || "?")}</b> · <a href="#" onclick="ytDisconnect();return false">disconnect</a></p>
+    ${!p.outputs.length ? `<p class="muted">Render the video first (step 5).</p>` : `
+    <label>Title (max 100)</label><input id="yt-title" maxlength="100">
+    <label>Description</label><textarea id="yt-desc" style="min-height:140px"></textarea>
+    <label>Tags (comma separated)</label><input id="yt-tags">
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px"><label>Visibility</label>
+        <select id="yt-privacy" onchange="ytSave();ytToggle()">
+          <option value="public">Public now</option><option value="schedule">Schedule</option>
+          <option value="unlisted">Unlisted</option><option value="private">Private</option></select></div>
+      <div style="flex:1;min-width:220px" id="yt-when-box"><label>Publish at (your local time)</label><input id="yt-when" type="datetime-local"></div>
+      <div style="flex:1;min-width:160px"><label>Category</label>
+        <select id="yt-cat"><option value="20">Gaming</option><option value="24">Entertainment</option>
+          <option value="1">Film & Animation</option><option value="22">People & Blogs</option></select></div>
+    </div>
+    <label>Custom thumbnail (optional, jpg/png ≤ 2 MB, needs a verified channel. Shorts usually pick their cover in the app)</label>
+    ${p.thumbnail ? `<p><img src="${BASE}${p.thumbnail}" style="height:90px;border-radius:6px;vertical-align:middle"> <label style="display:inline"><input type="checkbox" id="yt-thumb" style="width:auto" checked> use it</label></p>` : ""}
+    <div ${p.thumbnail ? 'style="display:none"' : ""}>${dropZone("thumbnail", "image/png,image/jpeg", "Drop thumbnail image here or click")}</div>
+    <div style="margin-top:14px;display:flex;gap:10px;align-items:center">
+      <button onclick="ytUpload()" ${busy ? "disabled" : ""}>${busy ? "Uploading…" : "⬆ Upload to YouTube"}</button>
+      <button class="ghost" onclick="ytReset()">Reset from metadata</button>
+      ${up && up.state === "error" ? `<span style="color:#e5484d">${esc(up.error)}</span>` : ""}
+    </div>
+    ${busy ? `<div class="bar" style="display:block"><i style="width:${Math.round(up.progress * 100)}%"></i></div><p class="muted">${Math.round(up.progress * 100)}% uploaded. Keep the server running.</p>` : ""}`}`;
+}
+
+async function ytFill(p){
+  if (!document.getElementById("yt-title")) return;
+  let f = ytForms[p.name];
+  if (!f) {
+    const d = await (await fetch(BASE + "/api/yt/defaults?name=" + encodeURIComponent(p.name))).json();
+    const t = new Date(Date.now() + 24 * 3600e3); t.setMinutes(0, 0, 0);
+    const local = new Date(t - t.getTimezoneOffset() * 60e3).toISOString().slice(0, 16);
+    f = ytForms[p.name] = {title: d.title || p.title, desc: d.description || "", tags: (d.tags || []).join(", "),
+                           privacy: "public", when: local, cat: "20"};
+  }
+  $("#yt-title").value = f.title; $("#yt-desc").value = f.desc; $("#yt-tags").value = f.tags;
+  $("#yt-privacy").value = f.privacy; $("#yt-when").value = f.when; $("#yt-cat").value = f.cat;
+  ["yt-title","yt-desc","yt-tags","yt-when","yt-cat"].forEach(id => $("#" + id).oninput = ytSave);
+  ytToggle();
+}
+function ytSave(){
+  if (!cur || !$("#yt-title")) return;
+  ytForms[cur] = {title: $("#yt-title").value, desc: $("#yt-desc").value, tags: $("#yt-tags").value,
+                  privacy: $("#yt-privacy").value, when: $("#yt-when").value, cat: $("#yt-cat").value};
+}
+function ytToggle(){ const b = $("#yt-when-box"); if (b) b.style.display = $("#yt-privacy").value === "schedule" ? "" : "none"; }
+function ytReset(){ delete ytForms[cur]; lastSig = ""; load(); }
+async function ytDisconnect(){ await api("/api/yt/disconnect", {method: "POST", body: "{}"}); ytStatus(); }
+async function ytUpload(){
+  ytSave(); const f = ytForms[cur];
+  const body = {name: cur, title: f.title.trim(), description: f.desc,
+                tags: f.tags.split(",").map(t => t.trim()).filter(Boolean),
+                privacy: f.privacy === "schedule" ? "private" : f.privacy, categoryId: f.cat,
+                useThumbnail: !!($("#yt-thumb") && $("#yt-thumb").checked)};
+  if (f.privacy === "schedule") {
+    const t = new Date(f.when);
+    if (!(t > new Date(Date.now() + 15 * 60e3))) return alert("Pick a time at least 15 minutes in the future");
+    body.publishAt = t.toISOString();
+  }
+  const what = f.privacy === "schedule" ? "schedule it for " + new Date(f.when).toLocaleString() : "upload it as " + f.privacy.toUpperCase();
+  if (!confirm(`Upload "${body.title}" to ${yt.channel?.title || "YouTube"} and ${what}?`)) return;
+  await api("/api/yt/upload", {method: "POST", body: JSON.stringify(body)});
+  toast("Upload started"); lastSig = ""; load();
+}
+
+// re-renders only when something on disk changed (Claude wrote a file / render finished)
+if (location.search.includes("yt=connected")) { history.replaceState(null, "", location.pathname); setTimeout(() => toast("YouTube connected"), 300); }
+load(); ytStatus(); setInterval(load, 4000);
+</script>
+</body>
+</html>

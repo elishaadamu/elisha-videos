@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elisha-videos: personal short-video studio</title>
+<link rel="icon" href="app_icon.png">
+<style>
+  :root{--bg:#0f1115;--panel:#171a21;--line:#262a33;--text:#e7e9ee;--muted:#8b93a3;--acc:#ffcc00}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 24px}
+  header{display:flex;align-items:center;gap:14px;padding:22px 0}
+  header img{width:44px;height:44px;border-radius:10px}
+  header b{font-size:20px}
+  nav{margin-left:auto;display:flex;gap:18px}
+  nav a{color:var(--muted);text-decoration:none}nav a:hover{color:var(--acc)}
+  .hero{padding:50px 0 30px}
+  h1{font-size:42px;line-height:1.15;margin:0 0 14px}h1 span{color:var(--acc)}
+  .lead{color:var(--muted);font-size:19px;max-width:720px}
+  h2{font-size:26px;margin:56px 0 8px}
+  .muted{color:var(--muted)}
+  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:20px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .card .n{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--acc);color:#111;font-weight:700;margin-bottom:8px}
+  .card h3{margin:0 0 6px;font-size:17px}
+  .card p{margin:0;color:var(--muted);font-size:14.5px}
+  .videos{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-top:20px}
+  .videos figure{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .videos video{width:100%;aspect-ratio:9/16;display:block;background:#000}
+  .videos figcaption{padding:10px 12px;font-size:14px}
+  .shot{width:100%;border-radius:14px;border:1px solid var(--line);margin-top:16px}
+  .note{background:var(--panel);border-left:4px solid var(--acc);padding:14px 18px;border-radius:8px;margin-top:20px}
+  footer{border-top:1px solid var(--line);margin-top:70px;padding:26px 0;color:var(--muted);font-size:14px;display:flex;gap:18px;flex-wrap:wrap}
+  footer a{color:var(--muted)}
+  a{color:var(--acc)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="app_icon.png" alt="Elisha-videos icon">
+    <b>Elisha-videos</b>
+    <nav><a href="#how">How it works</a><a href="#clips">Clips</a><a href="#publish">Publishing</a><a href="legal/privacy.html">Privacy</a><a href="legal/terms.html">Terms</a></nav>
+  </header>
+
+  <section class="hero">
+    <h1>Turn long gameplay videos into <span>scroll-stopping shorts</span>.</h1>
+    <p class="lead">Elisha-videos is my personal video studio. It finds the best moment in a long video, cuts it into a
+      9:16 short with title text, sound effects and captions, then publishes it to my own TikTok and YouTube accounts.
+      The app runs locally on my computer. This page shows how it works and the clips it produces.</p>
+  </section>
+
+  <section id="how">
+    <h2>How it works</h2>
+    <div class="steps">
+      <div class="card"><div class="n">1</div><h3>Upload</h3><p>Drop a long video (gameplay, movie) into a project and choose 9:16 or 16:9.</p></div>
+      <div class="card"><div class="n">2</div><h3>Find the best scene</h3><p>A local scene finder ranks moments by motion and cuts, then I pick the one that grabs attention.</p></div>
+      <div class="card"><div class="n">3</div><h3>Edit</h3><p>Cut, crop to vertical, add title text, music, sound effects and captions, all rendered locally with ffmpeg.</p></div>
+      <div class="card"><div class="n">4</div><h3>Publish</h3><p>Fill in caption, privacy and interaction settings, confirm, and post to my own TikTok / YouTube account.</p></div>
+    </div>
+    <img class="shot" src="screenshot-steps.jpg" alt="Clip Studio project steps">
+    <img class="shot" src="screenshot-render.jpg" alt="Rendered short inside the app">
+  </section>
+
+  <section id="clips">
+    <h2>Clips made with the app</h2>
+    <p class="muted">Vertical shorts (1080×1920 originals, compressed for the web).</p>
+    <div class="videos">
+      <figure><video controls preload="metadata" src="videos/gtavi-shortclip.mp4#t=0.5"></video><figcaption>GTA 6 weather is insane: seaplane into a storm</figcaption></figure>
+      <figure><video controls preload="metadata" src="videos/gtavi-boat-short.mp4#t=0.5"></video><figcaption>GTA 6 water looks real: boat run</figcaption></figure>
+      <figure><video controls preload="metadata" src="videos/gtavi-prologue-short.mp4#t=0.5"></video><figcaption>This is how GTA 6 starts: prologue</figcaption></figure>
+      <figure><video controls preload="metadata" src="videos/gtavi-car-short.mp4#t=0.5"></video><figcaption>GTA 6 driving looks real: highway run</figcaption></figure>
+      <figure><video controls preload="metadata" src="videos/gtavi-gunstore-short.mp4#t=0.5"></video><figcaption>GTA 6 shopping trip gone wrong</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="publish">
+    <h2>Publishing to TikTok</h2>
+    <div class="note">
+      <p style="margin-top:0"><b>Login Kit:</b> I connect my own TikTok account. The app shows my display name and avatar so I can confirm where the post goes.</p>
+      <p><b>Content Posting API:</b> before each post the app loads my creator info, then shows the caption, a privacy
+        selector built from the allowed options, and Comment / Duet / Stitch settings. Nothing is posted until I review it and press Post.
+        Optionally a clip can be sent to my TikTok drafts instead.</p>
+      <p style="margin-bottom:0"><b>Data:</b> tokens and videos stay on my computer. No data is sold or shared. See the <a href="legal/privacy.html">Privacy Policy</a>.</p>
+    </div>
+    <p class="muted" style="margin-top:14px">The app interface (front-end only) is in <a href="app.html">app.html</a>. It needs the local
+      server on the owner's computer to work, so opened here it only shows the layout.</p>
+  </section>
+
+  <footer>
+    <span>© 2026 Elisha-videos</span>
+    <a href="legal/terms.html">Terms of Service</a>
+    <a href="legal/privacy.html">Privacy Policy</a>
+  </footer>
+</div>
+</body>
+</html>
