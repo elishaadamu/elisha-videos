@@ -241,8 +241,9 @@ function render(){
       <label style="margin-top:16px">Background music (optional) — Claude adds it under your voice + sound effects. No upload = uses assets/music/ or none.</label>
       ${p.music?`<p>🎵 <b>${esc(p.music)}</b> — <a href="#" onclick="document.querySelector('#drop-music').click();return false">replace</a></p>`:""}
       <div ${p.music?'style="display:none"':""}>${dropZone("music","audio/*","Drop music track here or click")}</div>`)}
-  ${step(5, "Claude clips video + voiceover, adds captions, music & SFX", st("out"),
-     `${promptBox(`Clip the video and voiceover together for project "${N}" with captions, music and sound effects (${F})`)}
+  ${step(5, "Claude clips video + voiceover, adds captions, music & SFX", p.rendering ? "next" : st("out"),
+     `${p.rendering ? `<p style="color:var(--warn);font-weight:600">⏳ Rendering in progress. The video below is the previous version. Don't publish until this message disappears.</p>` : ""}
+      ${promptBox(`Clip the video and voiceover together for project "${N}" with captions, music and sound effects (${F})`)}
       <div class="outs">${p.outputs.slice().reverse().map(o=>`<div><video controls preload="metadata" src="${BASE}${o.url}?t=${o.time}" style="${F==="9:16"?"height:60vh":"width:min(100%,800px)"}"></video>
       <p><a href="${BASE}${o.url}" download>⬇ Download ${esc(o.name)}</a> <span class="muted">${o.mb} MB</span></p></div>`).join("")}</div>`)}
   ${step(6, "Title, description, tags & thumbnail/image prompt", st("meta"),
@@ -327,7 +328,7 @@ function ttPanel(p){
       ${tooLong ? `<p style="color:#e5484d">This video is ${Math.ceil(p.duration)}s, but your account can post up to ${ci.max_video_post_duration_sec}s.</p>` : ""}
       <p id="tt-consent" class="muted" style="margin-top:14px"></p>
       <div style="display:flex;gap:10px;align-items:center">
-        <button id="tt-go" onclick="ttPost()" ${busy || tooLong ? "disabled" : ""}>${busy ? (job.state === "processing" ? "Processing…" : "Uploading…") : "Post"}</button>
+        <button id="tt-go" onclick="ttPost()" ${busy || tooLong || p.rendering ? "disabled" : ""}>${busy ? (job.state === "processing" ? "Processing…" : "Uploading…") : "Post"}</button>
         <button class="ghost" onclick="ttReset()">Reset caption</button>
         ${job && job.state === "error" ? `<span style="color:#e5484d">${esc(job.error)}</span>` : ""}
       </div>
@@ -390,6 +391,7 @@ function ttUi(){
   $("#tt-consent").innerHTML = f.mode === "draft" ? "" : `By posting, you agree to TikTok's ${f.paid ? bc + " and " : ""}${music}.`;
   const disclosedButEmpty = f.mode === "direct" && f.disclose && !f.own && !f.paid;
   const go = $("#tt-go");
+  if (projects.find(x => x.name === cur)?.rendering) { go.disabled = true; go.textContent = "⏳ Rendering… wait"; return; }
   if (!go.textContent.includes("…")) {
     go.disabled = (f.mode === "direct" && !f.privacy) || disclosedButEmpty;
     go.title = disclosedButEmpty ? "You need to indicate if your content promotes yourself, a third party, or both." : (!f.privacy && f.mode === "direct" ? "Choose who can view this video" : "");
@@ -454,7 +456,7 @@ function ytPanel(p){
     ${p.thumbnail ? `<p><img src="${BASE}${p.thumbnail}?v=${p.thumbnail_v}" style="height:90px;border-radius:6px;vertical-align:middle"> <label style="display:inline"><input type="checkbox" id="yt-thumb" style="width:auto" checked> use it</label>
       · <a href="#" onclick="document.querySelector('#drop-thumbnail').click();return false">change thumbnail</a></p>` : `<p class="muted">No thumbnail yet: add one in step 6.</p>`}
     <div style="margin-top:14px;display:flex;gap:10px;align-items:center">
-      <button onclick="ytUpload()" ${busy ? "disabled" : ""}>${busy ? "Uploading…" : "⬆ Upload to YouTube"}</button>
+      <button onclick="ytUpload()" ${busy || p.rendering ? "disabled" : ""}>${busy ? "Uploading…" : p.rendering ? "⏳ Rendering… wait" : "⬆ Upload to YouTube"}</button>
       <button class="ghost" onclick="ytReset()">Reset from metadata</button>
       ${up && up.state === "error" ? `<span style="color:#e5484d">${esc(up.error)}</span>` : ""}
     </div>
