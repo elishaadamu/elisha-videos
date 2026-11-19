@@ -65,8 +65,9 @@
   </div>
   <label>Format</label>
   <div class="seg" id="nFormat">
-    <button class="on" data-v="9:16">9:16 · ≤60s</button>
-    <button data-v="16:9">16:9 · long</button>
+    <button class="on" data-v="9:16" title="Shorts/Reels, ≤60s">9:16</button>
+    <button data-v="16:9" title="Long YouTube video">16:9</button>
+    <button data-v="1:1">1:1</button>
   </div>
   <label>Notes for Claude (optional)</label>
   <textarea id="nNotes" placeholder="Niche, tone, target audience, language…"></textarea>
@@ -130,11 +131,47 @@ async function createProject(){
 async function saveFocus(){await api("/api/meta",{method:"POST",body:JSON.stringify({name:cur,focus:$("#focus").value.trim()})});toast("Saved");lastSig="";load()}
 async function setFormat(f){await api("/api/meta",{method:"POST",body:JSON.stringify({name:cur,format:f})});lastSig="";load()}
 
+// ---------- Thumbnail: sample frames + image prompt ----------
+function mdSection(src, name){
+  const m = (src || "").match(new RegExp("###\\s*" + name + "[^\\n]*\\n([\\s\\S]*?)(?=\\n###\\s|\\n##\\s|$)", "i"));
+  return m ? m[1].trim() : "";
+}
+function thumbBox(p){
+  const meta = p.docs["metadata.md"];
+  const prompt = mdSection(meta, "Image prompt");
+  const overlay = mdSection(meta, "Overlay text");
+  if (!prompt && !p.thumb_samples.length && !p.thumbnail) return "";
+  const label = u => decodeURIComponent(u.split("/").pop()).replace(/\.jpg$/, "").replace(/_/g, " ");
+  return `<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
+    <h3 style="margin:0 0 8px;font-size:15px">🖼️ Thumbnail</h3>
+    ${p.thumb_samples.length ? `<label>Sample frames from the video (best first). Use one as the reference image for your generator</label>
+      <div class="sheets">${p.thumb_samples.map(u => `<figure style="margin:0"><a href="${BASE}${u}" target="_blank" download><img src="${BASE}${u}" style="height:150px"></a>
+        <figcaption class="muted" style="font-size:12px">${esc(label(u))}</figcaption></figure>`).join("")}</div>` : ""}
+    ${prompt ? `<label>Image prompt</label>
+      <div class="doc" style="white-space:pre-wrap;max-height:none">${esc(prompt.replace(/\n(?!\n)/g, " "))}</div>
+      <div style="margin-top:8px;display:flex;gap:8px">${copyBtn(prompt.replace(/\n(?!\n)/g, " "), "📋 Copy prompt")}</div>` : ""}
+    ${overlay ? `<label>Text to put on the thumbnail</label><div class="doc">${md(overlay)}</div>` : ""}
+    ${p.thumbnail ? `<label>Ready-made thumbnail (used when publishing to YouTube)</label>
+      <a href="${BASE}${p.thumbnail}" target="_blank" download><img src="${BASE}${p.thumbnail}?v=${Date.now() >> 16}" style="max-width:min(100%,480px);border-radius:8px;margin-top:6px"></a>` : ""}
+  </div>`;
+}
+
+function movieList(p){
+  return `${p.videos.map(v => `<p>🎬 <b>${esc(v.name)}</b> <span class="muted">${v.mb} MB</span>
+      <a href="#" class="muted" onclick="removeMedia('video', ${JSON.stringify(v.name).replace(/"/g, "&quot;")});return false">remove</a></p>`).join("")}
+    <p class="muted">Add every movie the video talks about (e.g. Terminator 1, 2, 3). Name the files clearly. Claude cuts shots from all of them.</p>
+    ${dropZone("video", "video/*", p.videos.length ? "+ Add another movie" : "Drop a movie here or click to choose")}`;
+}
+async function removeMedia(kind, file){
+  if (!confirm("Remove " + file + " from this project?")) return;
+  await api("/api/media/delete", {method: "POST", body: JSON.stringify({name: cur, kind, file})}); lastSig = ""; load();
+}
 function upload(kind, file){
   const bar = $(`#bar-${kind}`), fill = bar.querySelector("i");
   bar.style.display="block";
   const x = new XMLHttpRequest();
-  x.open("POST", BASE + `/api/upload?project=${encodeURIComponent(cur)}&kind=${kind}`);
+  const append = kind === "video" && projects.find(x => x.name === cur)?.type === "movie" ? "&append=1" : "";
+  x.open("POST", BASE + `/api/upload?project=${encodeURIComponent(cur)}&kind=${kind}${append}`);
   x.setRequestHeader("X-Filename", encodeURIComponent(file.name));
   x.upload.onprogress = e => fill.style.width = (e.loaded/e.total*100)+"%";
   x.onload = () => {bar.style.display="none"; toast("Uploaded "+file.name); lastSig=""; load()};
@@ -165,21 +202,22 @@ function render(){
   const order = ["video","analysis","script","vo","out","meta"]; const nextKey = order.find(k=>!has[k]);
   const st = k => has[k] ? "done" : (k===nextKey ? "next" : "");
   const N = p.name, F = p.format; clips = [];
-  const len = F==="9:16" ? "a 9:16 short of the best moment only (≤60s)" : (movie ? "a long 16:9 movie recap/explanation" : "a 16:9 long video");
+  const len = F==="9:16" ? "a 9:16 short of the best moment only (≤60s)" : F==="1:1" ? "a 1:1 square video" : (movie ? "a long 16:9 movie recap/explanation" : "a 16:9 long video");
 
   $("#main").innerHTML = `
   <div class="head">
     <h2>${esc(p.title)}</h2>
     <span class="tag">${movie?"Movie recap":"Clip / Short"}</span>
-    <div class="seg" style="width:240px">
+    <div class="seg" style="width:300px">
       <button class="${F==="9:16"?"on":""}" onclick="setFormat('9:16')">9:16</button>
       <button class="${F==="16:9"?"on":""}" onclick="setFormat('16:9')">16:9</button>
+      <button class="${F==="1:1"?"on":""}" onclick="setFormat('1:1')">1:1</button>
     </div>
     <span class="muted">folder: projects/${N}/</span>
   </div>
   ${p.notes?`<p class="muted">Notes: ${esc(p.notes)}</p>`:""}
   <div class="steps">
-  ${step(1, movie?"Upload the movie":"Upload your video", st("video"),
+  ${step(1, movie?"Upload the movie(s)":"Upload your video", st("video"), movie ? movieList(p) :
      (p.video?`<p>✅ <b>${esc(p.video)}</b> — <a href="#" onclick="document.querySelector('#drop-video').click();return false">replace</a></p>`:"") +
      `<div ${p.video?'style="display:none"':""}>${dropZone("video","video/*","Drop video here or click to choose")}</div>`)}
   ${step(2, "Claude analyses the video", st("analysis"),
@@ -188,7 +226,7 @@ function render(){
       <button class="ghost" onclick="saveFocus()">Save</button></div>
       <p class="muted">The scene finder ranks the best moments locally (motion, cuts, brightness), so Claude only reviews the top picks.</p>
       ${promptBox(`Analyse the video in project "${N}"${p.focus?` and use the scene: ${p.focus}`:""}${movie?" — it's a movie, I want to explain/recap it for YouTube":""}`)}
-      ${p.top_scenes?`<p class="muted" style="margin-bottom:0">Top-ranked scenes:</p><a href="${BASE}${p.top_scenes}" target="_blank"><img src="${BASE}${p.top_scenes}?v=${p.created}" style="max-width:min(100%,720px);border-radius:8px;margin-top:6px"></a>`:""}
+      ${p.top_scenes_all.length?`<p class="muted" style="margin-bottom:0">Top-ranked scenes${p.top_scenes_all.length > 1 ? " (one image per movie)" : ""}:</p><div class="sheets">${p.top_scenes_all.map(t => `<a href="${BASE}${t}" target="_blank"><img src="${BASE}${t}?v=${p.created}" style="height:320px"></a>`).join("")}</div>`:""}
       ${p.sheets.length?`<details><summary class="muted">Overview sheets</summary><div class="sheets">${p.sheets.map(s=>`<a href="${BASE}${s}" target="_blank"><img src="${BASE}${s}"></a>`).join("")}</div></details>`:""}
       ${has.analysis?`<div class="doc">${md(d["analysis.md"])}</div>`:""}`)}
   ${step(3, "Get the voiceover script", st("script"),
@@ -206,7 +244,8 @@ function render(){
       <p><a href="${BASE}${o.url}" download>⬇ Download ${esc(o.name)}</a> <span class="muted">${o.mb} MB</span></p></div>`).join("")}</div>`)}
   ${step(6, "Title, description, tags & thumbnail/image prompt", st("meta"),
      `${promptBox(`Give me the title, description, hashtags, tags and thumbnail image prompt for project "${N}" (YouTube + Facebook)`)}
-      ${has.meta?`<div style="margin-top:8px">${copyBtn(d["metadata.md"],"Copy all")}</div><div class="doc">${md(d["metadata.md"])}</div>`:""}`)}
+      ${has.meta?`<div style="margin-top:8px">${copyBtn(d["metadata.md"],"Copy all")}</div><div class="doc">${md(d["metadata.md"])}</div>`:""}
+      ${thumbBox(p)}`)}
   ${step(7, "Publish to YouTube", p.youtube.length ? "done" : (has.out && has.meta ? "next" : ""), ytPanel(p))}
   ${step(8, "Publish to TikTok", p.tiktok.some(e => ["PUBLISH_COMPLETE","SEND_TO_USER_INBOX"].includes(e.status)) ? "done" : "", ttPanel(p))}
   </div>`;
