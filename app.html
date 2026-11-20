@@ -50,6 +50,21 @@
   .outs{display:flex;gap:16px;flex-wrap:wrap}.outs > div{flex:0 1 auto}
   .empty{display:grid;place-items:center;height:70vh;color:var(--muted);text-align:center}
   a{color:var(--acc)}
+  .cal{border:1px solid var(--line);border-radius:10px;padding:10px;max-width:460px;background:var(--bg)}
+  .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .cal-head button{padding:2px 12px}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .cal-dow{font-size:11px;color:var(--muted);text-align:center}
+  .cal-day{position:relative;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px 0 12px;font-weight:600;cursor:pointer}
+  .cal-day:hover:not([disabled]){border-color:var(--acc)}
+  .cal-day[disabled]{opacity:.3;cursor:default}
+  .cal-day.today{border-color:var(--muted)}
+  .cal-day.sel{background:var(--acc);color:#111;border-color:var(--acc)}
+  .cal-dots{position:absolute;left:0;right:0;bottom:3px;display:flex;justify-content:center;gap:3px}
+  .cal-dots i,.cal-key{display:inline-block;width:6px;height:6px;border-radius:50%}
+  .cal-key{margin-left:6px}
+  .yt{background:#ff3b3b}.tt{background:#25f4ee}
+  .cal-foot{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:13px}
   .toast{position:fixed;bottom:20px;right:20px;background:var(--ok);color:#111;padding:8px 14px;border-radius:8px;font-weight:600;display:none}
 </style>
 </head>
@@ -323,7 +338,7 @@ function ttPanel(p){
       </div>
       <div id="tt-draft" style="display:none"><p class="muted">The video is sent to your TikTok inbox. Open TikTok to add sounds or effects and post it from there.</p></div>
       <label style="display:flex;gap:8px;align-items:center;margin-top:14px;color:var(--text)"><input type="checkbox" id="tt-sched" style="width:auto"> Schedule for later</label>
-      <div id="tt-sched-box" style="display:none"><input id="tt-when" type="datetime-local">
+      <div id="tt-sched-box" style="display:none"><input id="tt-when" type="hidden"><div id="tt-cal"></div>
         <p class="muted" style="margin:4px 0 0">Clip Studio posts it at that time, so keep this computer on and <code>python3 server.py</code> running.</p></div>
       ${tooLong ? `<p style="color:#e5484d">This video is ${Math.ceil(p.duration)}s, but your account can post up to ${ci.max_video_post_duration_sec}s.</p>` : ""}
       <p id="tt-consent" class="muted" style="margin-top:14px"></p>
@@ -383,6 +398,7 @@ function ttUi(){
   $("#tt-direct").style.display = f.mode === "direct" ? "" : "none"; $("#tt-draft").style.display = f.mode === "draft" ? "" : "none";
   $("#tt-disclose-box").style.display = f.disclose ? "" : "none";
   $("#tt-sched-box").style.display = f.sched ? "" : "none";
+  drawCal("tt");
   // Branded content can't be private
   const selfOpt = document.getElementById("tt-p-SELF_ONLY");
   if (selfOpt) { selfOpt.disabled = f.paid; selfOpt.textContent = f.paid ? "Only me (not available for branded content)" : "Only me"; }
@@ -421,6 +437,81 @@ async function ttPost(){
   toast(f.sched ? "Scheduled" : "Posting to TikTok…"); lastSig = ""; load();
 }
 
+// ---------- Schedule calendar (shared by YouTube + TikTok) ----------
+const calView = {};   // prefix -> {y, m} month being shown
+const pad2 = n => String(n).padStart(2, "0");
+const dayKey = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+function scheduledPosts(){
+  // every upcoming/planned post across all projects, so you can see free days
+  const out = [];
+  for (const p of projects) {
+    for (const h of p.youtube || []) if (h.publishAt) out.push({when: new Date(h.publishAt), kind: "YouTube", title: h.title, project: p.title});
+    for (const e of p.tiktok || []) if (e.status === "SCHEDULED" && e.at_ts) out.push({when: new Date(e.at_ts * 1000), kind: "TikTok", title: (e.title || "").split("\n")[0], project: p.title});
+  }
+  return out;
+}
+
+function drawCal(prefix){
+  const box = document.getElementById(prefix + "-cal"), input = document.getElementById(prefix + "-when");
+  if (!box || !input) return;
+  const sel = input.value ? new Date(input.value) : null;
+  const v = calView[prefix] || (calView[prefix] = sel ? {y: sel.getFullYear(), m: sel.getMonth()} : {y: new Date().getFullYear(), m: new Date().getMonth()});
+  const first = new Date(v.y, v.m, 1), days = new Date(v.y, v.m + 1, 0).getDate();
+  const lead = (first.getDay() + 6) % 7;             // Monday-first grid
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const posts = scheduledPosts(), byDay = {};
+  posts.forEach(x => (byDay[dayKey(x.when)] = byDay[dayKey(x.when)] || []).push(x));
+  let cells = "";
+  for (let i = 0; i < lead; i++) cells += `<div></div>`;
+  for (let d = 1; d <= days; d++) {
+    const date = new Date(v.y, v.m, d), k = dayKey(date), past = date < today;
+    const isSel = sel && dayKey(sel) === k, isToday = dayKey(today) === k, items = byDay[k] || [];
+    const tip = items.map(x => `${x.kind} ${pad2(x.when.getHours())}:${pad2(x.when.getMinutes())}: ${x.title}`).join("\n");
+    cells += `<button type="button" class="cal-day${isSel ? " sel" : ""}${isToday ? " today" : ""}" ${past ? "disabled" : ""}
+        title="${esc(tip)}" onclick="calPick('${prefix}', ${v.y}, ${v.m}, ${d})">${d}
+        ${items.length ? `<span class="cal-dots">${items.map(x => `<i class="${x.kind === "YouTube" ? "yt" : "tt"}"></i>`).join("")}</span>` : ""}</button>`;
+  }
+  const t = sel ? `${pad2(sel.getHours())}:${pad2(sel.getMinutes())}` : "18:00";
+  let times = "";
+  for (let h = 0; h < 24; h++) for (const mm of [0, 15, 30, 45]) { const x = `${pad2(h)}:${pad2(mm)}`; times += `<option ${x === t ? "selected" : ""}>${x}</option>`; }
+  const monthName = first.toLocaleString(undefined, {month: "long", year: "numeric"});
+  const selItems = sel ? (byDay[dayKey(sel)] || []) : [];
+  box.innerHTML = `<div class="cal">
+    <div class="cal-head"><button type="button" class="ghost" onclick="calMove('${prefix}',-1)">‹</button>
+      <b>${monthName}</b><button type="button" class="ghost" onclick="calMove('${prefix}',1)">›</button></div>
+    <div class="cal-grid">${["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(x => `<div class="cal-dow">${x}</div>`).join("")}${cells}</div>
+    <div class="cal-foot">
+      <span>Time <select onchange="calTime('${prefix}', this.value)" style="width:auto">${times}</select></span>
+      <span class="muted">${sel ? "📅 " + sel.toLocaleString(undefined, {weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"}) : "Pick a day"}</span>
+      <span class="muted" style="margin-left:auto"><i class="cal-key yt"></i> YouTube <i class="cal-key tt"></i> TikTok already scheduled</span>
+    </div>
+    ${selItems.length ? `<p class="muted" style="margin:6px 0 0">⚠️ Already on this day: ${selItems.map(x => esc(x.kind + " " + pad2(x.when.getHours()) + ":" + pad2(x.when.getMinutes()) + " (" + x.project + ")")).join(", ")}. One Short a day works best.</p>` : ""}
+  </div>`;
+}
+function calSet(prefix, date){
+  const input = document.getElementById(prefix + "-when");
+  input.value = `${dayKey(date)}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+  if (prefix === "yt") ytSave(); else { ttSave(); }
+  drawCal(prefix);
+}
+function calPick(prefix, y, m, d){
+  const input = document.getElementById(prefix + "-when");
+  const old = input.value ? new Date(input.value) : null;
+  calSet(prefix, new Date(y, m, d, old ? old.getHours() : 18, old ? old.getMinutes() : 0));
+}
+function calTime(prefix, hm){
+  const input = document.getElementById(prefix + "-when");
+  const base = input.value ? new Date(input.value) : new Date(Date.now() + 864e5);
+  const [h, mi] = hm.split(":").map(Number); base.setHours(h, mi, 0, 0);
+  calSet(prefix, base);
+}
+function calMove(prefix, step){
+  const v = calView[prefix]; v.m += step;
+  if (v.m < 0) { v.m = 11; v.y--; } if (v.m > 11) { v.m = 0; v.y++; }
+  drawCal(prefix);
+}
+
 // ---------- YouTube publishing ----------
 let yt = null;            // {configured, connected, channel, error}
 const ytForms = {};        // per-project form state, survives re-renders
@@ -449,11 +540,12 @@ function ytPanel(p){
         <select id="yt-privacy" onchange="ytSave();ytToggle()">
           <option value="public">Public now</option><option value="schedule">Schedule</option>
           <option value="unlisted">Unlisted</option><option value="private">Private</option></select></div>
-      <div style="flex:1;min-width:220px" id="yt-when-box"><label>Publish at (your local time)</label><input id="yt-when" type="datetime-local"></div>
       <div style="flex:1;min-width:160px"><label>Category</label>
         <select id="yt-cat"><option value="20">Gaming</option><option value="24">Entertainment</option>
           <option value="1">Film & Animation</option><option value="22">People & Blogs</option></select></div>
     </div>
+    <div id="yt-when-box"><label>Publish date &amp; time (your local time)</label>
+      <input id="yt-when" type="hidden"><div id="yt-cal"></div></div>
     <label>Custom thumbnail (optional, jpg/png ≤ 2 MB, needs a verified channel. Shorts usually pick their cover in the app)</label>
     ${p.thumbnail ? `<p><img src="${BASE}${p.thumbnail}?v=${p.thumbnail_v}" style="height:90px;border-radius:6px;vertical-align:middle"> <label style="display:inline"><input type="checkbox" id="yt-thumb" style="width:auto" checked> use it</label>
       · <a href="#" onclick="document.querySelector('#drop-thumbnail').click();return false">change thumbnail</a></p>` : `<p class="muted">No thumbnail yet: add one in step 6.</p>`}
@@ -487,7 +579,7 @@ function ytSave(){
   ytForms[cur] = {...(ytForms[cur] || {}), title: $("#yt-title").value, desc: $("#yt-desc").value, tags: $("#yt-tags").value,
                   privacy: $("#yt-privacy").value, when: $("#yt-when").value, cat: $("#yt-cat").value, edited: true};
 }
-function ytToggle(){ const b = $("#yt-when-box"); if (b) b.style.display = $("#yt-privacy").value === "schedule" ? "" : "none"; }
+function ytToggle(){ const b = $("#yt-when-box"); if (b) b.style.display = $("#yt-privacy").value === "schedule" ? "" : "none"; drawCal("yt"); }
 function ytReset(){ delete ytForms[cur]; lastSig = ""; load(); }
 async function ytDisconnect(){ await api("/api/yt/disconnect", {method: "POST", body: "{}"}); ytStatus(); }
 async function ytUpload(){
