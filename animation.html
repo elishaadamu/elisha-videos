@@ -126,6 +126,23 @@ function dropZone(kind, key, accept, label){
     <input type="file" accept="${accept}" hidden onchange="upload('${kind}',${JSON.stringify(key).replace(/"/g,"&quot;")},this.files[0])">
     <div class="bar" id="${id}"><i></i></div>`;
 }
+// one box to copy several prompts at once (grouped by kind), e.g. all 6 backgrounds
+function copyAllBox(a){
+  const kinds = [...new Set(a.prompts.map(p => p.kind))];
+  const label = {character: "character", background: "background", overlays: "overlay", props: "props", environment: "environment"};
+  const pack = ps => ps.map((p, i) => `#${i + 1} ${p.name} (${p.id}), size: ${p.size || "16:9"}\n${p.prompt}`).join("\n\n----------\n\n");
+  const btns = kinds.map(k => { const ps = a.prompts.filter(p => p.kind === k);
+    const todo = ps.filter(p => !a.art[p.id]);
+    return `${copyBtn(pack(ps), `📋 All ${ps.length} ${label[k] || k} prompt${ps.length > 1 ? "s" : ""}`)}
+      ${todo.length && todo.length < ps.length ? copyBtn(pack(todo), `📋 Only the ${todo.length} not uploaded yet`) : ""}`; }).join("");
+  const missing = a.prompts.filter(p => !a.art[p.id]);
+  return `<div style="border:1px solid var(--acc);border-radius:10px;padding:12px;margin-top:12px;background:var(--bg)">
+    <b>📦 Copy all prompts at once</b> <span class="muted">(each prompt is numbered and separated by a line)</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${btns}
+      ${missing.length ? copyBtn(pack(missing), `⭐ Everything still missing (${missing.length})`) : ""}</div>
+  </div>`;
+}
+
 const step = (n, title, state, body) => `<div class="step ${state}"><header><div class="num">${state==="done"?"✓":n}</div><h3>${title}</h3></header>${body}</div>`;
 
 function render(){
@@ -220,6 +237,7 @@ function render(){
     !a.prompts.length ? `<p class="muted">The image prompts appear here after step 1.</p>` :
     `<p class="muted">Generate each image with your AI image tool, upload it under its prompt, then ask Claude to cut them into pieces:</p>
      ${promptBox(`Cut the art sheets for animation "${N}"`)}
+     ${copyAllBox(a)}
      <div class="arts" style="margin-top:12px">${a.prompts.map(artBox).join("")}</div>`)}
   ${step(4, "Build, animate & render", st("out"),
     `${a.rendering ? `<p style="color:var(--warn);font-weight:600">⏳ Rendering…</p>` : ""}
