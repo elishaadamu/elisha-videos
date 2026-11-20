@@ -208,7 +208,7 @@ function render(){
       <div class="ptext">${esc(p.prompt)}</div>
       <div style="display:flex;gap:8px">${copyBtn(p.prompt, "📋 Copy prompt")}${p.size ? `<span class="muted" style="align-self:center">Size: ${esc(p.size)}</span>` : ""}</div>
       ${up ? `<a href="${BASE}${up.url}" target="_blank"><img src="${BASE}${up.url}?v=${up.v}"></a>
-        ${up.preview ? `<p class="muted" style="margin:8px 0 0">✂️ Cut into <b>${up.pieces}</b> pieces:</p><a href="${BASE}${up.preview}?v=${up.v}" target="_blank"><img src="${BASE}${up.preview}?v=${up.v}"></a>`
+        ${up.full ? `<p style="margin:8px 0 0;color:var(--ok)">✅ Full background, used as-is (no cutting needed)</p>` : up.preview ? `<p class="muted" style="margin:8px 0 0">✂️ Cut into <b>${up.pieces}</b> pieces:</p><a href="${BASE}${up.preview}?v=${up.v}" target="_blank"><img src="${BASE}${up.preview}?v=${up.v}"></a>`
                      : `<p class="muted" style="margin:6px 0 0">Not cut yet. Ask Claude (step 3 prompt).</p>`}` : ""}
       <div style="margin-top:8px">${dropZone("art", p.id, "image/png,image/jpeg,image/webp", up ? "🔄 Replace image" : "Drop the generated image here")}</div>
     </div>`; };
