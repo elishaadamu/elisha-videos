@@ -151,9 +151,12 @@ function render(){
       return `<div class="line"><b>${i + 1}<br><span class="muted">${esc(l.id)}${l.shot ? "<br>shot " + l.shot : ""}</span></b><div>${esc(l.text)}
         ${sp && sp.error ? `<div class="score bad">⚠ ${esc(sp.error)}</div>` : ""}
         ${au ? `<audio controls preload="none" src="${BASE}${au}"></audio>
-           <div class="score ${sp && sp.score < 0.7 ? "bad" : "ok"}">${sp ? (sp.source === "elevenlabs" ? `ElevenLabs · ${sp.dur}s · ${sp.chars} chars` : `${sp.dur}s · match ${Math.round(sp.score * 100)}%`) : ""}</div>` : ""}
+           <div class="score ${sp && sp.score < 0.7 ? "bad" : "ok"}">${sp ? (sp.source === "elevenlabs" ? `ElevenLabs ${sp.model === "eleven_v3" ? "v3 🎭" : (sp.model ? "v2 (no emotion tags)" : "v2 (no emotion tags)")} · ${sp.dur}s · ${sp.chars} chars${sp.model === "eleven_v3" ? "" : " · regenerate for emotions"}` : `${sp.dur}s · match ${Math.round(sp.score * 100)}%`) : ""}</div>` : ""}
+        ${tts ? `<div class="muted" style="font-size:11px;margin-top:4px">How it's performed (emotion tags in [brackets], edit freely):</div>
+          <textarea class="perf" rows="2" onchange="savePerf('${l.id}', this.value)"
+            style="font:12px ui-monospace,Menlo,monospace;color:var(--acc);padding:5px 8px;margin-top:2px;min-height:0">${esc(l.performance || l.text)}</textarea>` : ""}
         ${tts ? `<div style="margin-top:4px"><button class="${au ? "ghost" : ""}" style="padding:4px 10px;font-size:12px" 
-            onclick="ttsLine('${l.id}', ${l.text.length}, ${au ? "true" : "false"}, this, ${vid ? "true" : "false"}, ${JSON.stringify(c).replace(/"/g, "&quot;")})">${au ? "🔄 Regenerate" : "🎙️ Generate"} · ${l.text.length} chars</button></div>` : ""}
+            onclick="ttsLine('${l.id}', ${(l.performance || l.text).length}, ${au ? "true" : "false"}, this, ${vid ? "true" : "false"}, ${JSON.stringify(c).replace(/"/g, "&quot;")})">${au ? "🔄 Regenerate" : "🎙️ Generate"} · ${(l.performance || l.text).length} chars</button></div>` : ""}
       </div></div>`; };
     if (tts) {
       const opts = (el.voices || []).map(x => `<option value="${x.id}" ${x.id === vid ? "selected" : ""}>${esc(x.name)}</option>`).join("");
@@ -203,7 +206,13 @@ function render(){
      ${a.story ? `<div class="doc">${md(a.story)}</div>` : `<p class="muted">Claude writes the story, splits every spoken line by character, and writes the art prompts.</p>`}`)}
   ${step(2, "Voiceovers by character", st("voice"),
     !a.lines.length ? `<p class="muted">The lines appear here after step 1.</p>` :
-    `<p class="muted">🤖 Characters: pick an ElevenLabs voice and click Generate per line (saved automatically).
+    `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+       <span class="muted">🎭 Character expression (Eleven v3):</span>
+       <select style="width:auto" onchange="setExpression(this.value)">
+         ${[["creative","Creative: most emotional, follows tags strongly"],["natural","Natural: balanced"],["robust","Robust: steady, less emotion"]]
+           .map(([v,t]) => `<option value="${v}" ${(a.expression || "creative") === v ? "selected" : ""}>${t}</option>`).join("")}</select>
+       <span class="muted" style="font-size:12px">Tags: [sighs] [laughs] [whispers] [excited] [sad] [angry] [gasps] [nervous laugh] [sarcastic]…</span></div>
+     <p class="muted">🤖 Characters: pick an ElevenLabs voice and click Generate per line (saved automatically).
        🎙️ Narrator: upload your own recording, then ask Claude to cut it into lines:</p>
      ${promptBox(`Split the voiceovers for animation "${N}"`)}
      <div class="chars" style="margin-top:12px">${chars.map(charBox).join("")}</div>`)}
@@ -221,6 +230,12 @@ function render(){
        <p><a href="${BASE}${o.url}" download>⬇ ${esc(o.name)}</a> <span class="muted">${o.mb} MB</span></p>`).join("")}
      <p class="muted">When the final video is ready, publishing (captions, music, YouTube/TikTok, calendar) works like the Clips page.</p>`)}
   </div>`;
+}
+async function savePerf(line, performance){
+  await api("/api/anim/line-update", {method: "POST", body: JSON.stringify({name: cur, line, performance})}); toast("Saved " + line); lastSig = ""; load();
+}
+async function setExpression(expression){
+  await api("/api/anim/expression", {method: "POST", body: JSON.stringify({name: cur, expression})}); toast("Expression: " + expression); lastSig = ""; load();
 }
 async function setVoice(character, voice_id){
   await api("/api/anim/voice-set", {method: "POST", body: JSON.stringify({name: cur, character, voice_id})}); lastSig = ""; load();
