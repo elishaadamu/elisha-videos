@@ -351,11 +351,13 @@ async function ttFill(p){
   if (ttCreator[p.name] === undefined) return ttLoadCreator(p.name);
   if (!document.getElementById("tt-title")) return;
   let f = ttForms[p.name];
+  const ttSig = (p.docs["metadata.md"] || "").length;
+  if (f && !f.edited && f.metaSig !== ttSig) { delete ttForms[p.name]; f = null; }
   if (!f) {
     const d = await (await fetch(BASE + "/api/tt/defaults?name=" + encodeURIComponent(p.name))).json();
     const t = new Date(Date.now() + 24 * 3600e3); t.setMinutes(0, 0, 0);
     f = ttForms[p.name] = {mode: "direct", title: d.title || p.title, privacy: "", comment: false, duet: false, stitch: false,
-      disclose: false, own: false, paid: false, sched: false, when: new Date(t - t.getTimezoneOffset() * 60e3).toISOString().slice(0, 16)};
+      disclose: false, own: false, paid: false, sched: false, metaSig: ttSig, edited: false, when: new Date(t - t.getTimezoneOffset() * 60e3).toISOString().slice(0, 16)};
   }
   $("#tt-title").value = f.title; $("#tt-privacy").value = f.privacy;
   ["comment","duet","stitch"].forEach(k => { const el = $("#tt-allow-" + k); el.checked = f[k] && !el.disabled; });
@@ -371,7 +373,7 @@ function ttSave(){
   Object.assign(f, {title: $("#tt-title").value, privacy: $("#tt-privacy").value,
     comment: $("#tt-allow-comment").checked, duet: $("#tt-allow-duet").checked, stitch: $("#tt-allow-stitch").checked,
     disclose: $("#tt-disclose").checked, own: $("#tt-brand-own").checked, paid: $("#tt-brand-paid").checked,
-    sched: $("#tt-sched").checked, when: $("#tt-when").value});
+    sched: $("#tt-sched").checked, when: $("#tt-when").value, edited: true});
   if (!f.disclose) { f.own = false; f.paid = false; }
 }
 function ttMode(m){ ttForms[cur].mode = m; ttUi(); }
@@ -466,12 +468,14 @@ function ytPanel(p){
 async function ytFill(p){
   if (!document.getElementById("yt-title")) return;
   let f = ytForms[p.name];
+  const metaSig = (p.docs["metadata.md"] || "").length + ":" + (p.docs["metadata.md"] || "").slice(0, 200);
+  if (f && !f.edited && f.metaSig !== metaSig) { delete ytForms[p.name]; f = null; }  // metadata changed: refill
   if (!f) {
     const d = await (await fetch(BASE + "/api/yt/defaults?name=" + encodeURIComponent(p.name))).json();
     const t = new Date(Date.now() + 24 * 3600e3); t.setMinutes(0, 0, 0);
     const local = new Date(t - t.getTimezoneOffset() * 60e3).toISOString().slice(0, 16);
     f = ytForms[p.name] = {title: d.title || p.title, desc: d.description || "", tags: (d.tags || []).join(", "),
-                           privacy: "public", when: local, cat: "20"};
+                           privacy: "public", when: local, cat: "20", metaSig, edited: false};
   }
   $("#yt-title").value = f.title; $("#yt-desc").value = f.desc; $("#yt-tags").value = f.tags;
   $("#yt-privacy").value = f.privacy; $("#yt-when").value = f.when; $("#yt-cat").value = f.cat;
@@ -480,8 +484,8 @@ async function ytFill(p){
 }
 function ytSave(){
   if (!cur || !$("#yt-title")) return;
-  ytForms[cur] = {title: $("#yt-title").value, desc: $("#yt-desc").value, tags: $("#yt-tags").value,
-                  privacy: $("#yt-privacy").value, when: $("#yt-when").value, cat: $("#yt-cat").value};
+  ytForms[cur] = {...(ytForms[cur] || {}), title: $("#yt-title").value, desc: $("#yt-desc").value, tags: $("#yt-tags").value,
+                  privacy: $("#yt-privacy").value, when: $("#yt-when").value, cat: $("#yt-cat").value, edited: true};
 }
 function ytToggle(){ const b = $("#yt-when-box"); if (b) b.style.display = $("#yt-privacy").value === "schedule" ? "" : "none"; }
 function ytReset(){ delete ytForms[cur]; lastSig = ""; load(); }
