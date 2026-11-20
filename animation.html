@@ -19,6 +19,7 @@
   textarea{min-height:70px;resize:vertical}
   button{background:var(--acc);color:#111;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;font:inherit;font-weight:600}
   button.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+  button:disabled{opacity:.45;cursor:not-allowed}
   .seg{display:flex;gap:6px}.seg button{flex:1}.seg button:not(.on){background:transparent;color:var(--muted);border:1px solid var(--line)}
   .plist{margin-top:22px;display:flex;flex-direction:column;gap:6px}
   .pitem{padding:10px;border:1px solid var(--line);border-radius:8px;cursor:pointer}.pitem.on{border-color:var(--acc)}
@@ -151,8 +152,8 @@ function render(){
         ${sp && sp.error ? `<div class="score bad">⚠ ${esc(sp.error)}</div>` : ""}
         ${au ? `<audio controls preload="none" src="${BASE}${au}"></audio>
            <div class="score ${sp && sp.score < 0.7 ? "bad" : "ok"}">${sp ? (sp.source === "elevenlabs" ? `ElevenLabs · ${sp.dur}s · ${sp.chars} chars` : `${sp.dur}s · match ${Math.round(sp.score * 100)}%`) : ""}</div>` : ""}
-        ${tts ? `<div style="margin-top:4px"><button class="${au ? "ghost" : ""}" style="padding:4px 10px;font-size:12px" ${vid ? "" : "disabled title='Pick a voice first'"}
-            onclick="ttsLine('${l.id}', ${l.text.length}, ${au ? "true" : "false"}, this)">${au ? "🔄 Regenerate" : "🎙️ Generate"} · ${l.text.length} chars</button></div>` : ""}
+        ${tts ? `<div style="margin-top:4px"><button class="${au ? "ghost" : ""}" style="padding:4px 10px;font-size:12px" 
+            onclick="ttsLine('${l.id}', ${l.text.length}, ${au ? "true" : "false"}, this, ${vid ? "true" : "false"}, ${JSON.stringify(c).replace(/"/g, "&quot;")})">${au ? "🔄 Regenerate" : "🎙️ Generate"} · ${l.text.length} chars</button></div>` : ""}
       </div></div>`; };
     if (tts) {
       const opts = (el.voices || []).map(x => `<option value="${x.id}" ${x.id === vid ? "selected" : ""}>${esc(x.name)}</option>`).join("");
@@ -161,8 +162,9 @@ function render(){
       return `<div class="char"><h4>🤖 ${esc(c)} <span class="tag">${ls.length} line${ls.length > 1 ? "s" : ""}</span>
           <span class="tag" style="color:${done === ls.length ? "var(--ok)" : "var(--muted)"}">${done}/${ls.length} generated</span></h4>
         <div class="muted" style="font-size:12px">ElevenLabs voice. Nothing is generated until you click. Cost ≈ 1 credit per character.</div>
+        ${vid ? "" : `<div style="color:var(--warn);font-size:12px;font-weight:600;margin-top:4px">① Choose a voice for ${esc(c)} first, then ② click Generate on a line.</div>`}
         <div style="display:flex;gap:8px;align-items:center;margin:6px 0">
-          <select onchange="setVoice(${JSON.stringify(c).replace(/"/g, "&quot;")}, this.value)"><option value="">Choose a voice…</option>${opts}</select>
+          <select style="${vid ? "" : "border-color:var(--warn)"}" onchange="setVoice(${JSON.stringify(c).replace(/"/g, "&quot;")}, this.value)"><option value="">Choose a voice…</option>${opts}</select>
           ${pv && pv.preview ? `<button class="ghost" style="padding:6px 10px" onclick="new Audio('${pv.preview}').play()" title="Preview this voice (free)">▶</button>` : ""}
         </div>
         ${ls.map(lineRow).join("")}
@@ -223,7 +225,8 @@ function render(){
 async function setVoice(character, voice_id){
   await api("/api/anim/voice-set", {method: "POST", body: JSON.stringify({name: cur, character, voice_id})}); lastSig = ""; load();
 }
-async function ttsLine(id, chars, again, btn){
+async function ttsLine(id, chars, again, btn, hasVoice, character){
+  if (!hasVoice) { alert(`Choose a voice for ${character} first (the dropdown above the lines).`); return; }
   if (again && !confirm(`Regenerate ${id}? This uses about ${chars} ElevenLabs credits again.`)) return;
   btn.disabled = true; btn.textContent = "⏳ Generating…";
   try { await api("/api/anim/tts", {method: "POST", body: JSON.stringify({name: cur, line: id})}); toast(id + " saved"); }
